@@ -1,7 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const fs = require("fs");
-const { groth16 } = require("snarkjs");
+const { groth16, plonk } = require("snarkjs");
+const sizeOf = require("object-sizeof");
 
 function unstringifyBigInts(o) {
     if ((typeof(o) == "string") && (/^[0-9]+$/.test(o) ))  {
@@ -35,22 +36,36 @@ describe("HelloWorld", function () {
 
     it("Should return true for correct proof", async function () {
         //[assignment] Add comments to explain what each line is doing
-        const { proof, publicSignals } = await groth16.fullProve({"a":"1","b":"2"}, "contracts/circuits/HelloWorld/HelloWorld_js/HelloWorld.wasm","contracts/circuits/HelloWorld/circuit_final.zkey");
 
+        // Create a proof using groth16 protocol and bn128 curve pairing from .wasm and .zkey file of HelloWorld
+        const { proof, publicSignals } = await groth16.fullProve({"a":"1","b":"2"}, "contracts/circuits/HelloWorld/HelloWorld_js/HelloWorld.wasm","contracts/circuits/HelloWorld/circuit_final.zkey");
+        // gives size of proof variable
+        console.log(sizeOf(proof));
+
+        // Print first element of publicSignals array in console
+        // publicSignals array consists of public signals present in template of circom code
         console.log('1x2 =',publicSignals[0]);
 
+        // First two line converts string type into built-in object of BigInt
+        // callData variable contains the input parameters required to verify the proof
         const editedPublicSignals = unstringifyBigInts(publicSignals);
         const editedProof = unstringifyBigInts(proof);
         const calldata = await groth16.exportSolidityCallData(editedProof, editedPublicSignals);
     
+        // extracts the input parameters required for verifyProof from calldata
         const argv = calldata.replace(/["[\]\s]/g, "").split(',').map(x => BigInt(x).toString());
     
+        // assigns required elements of argv to paramters a, b, c and input
         const a = [argv[0], argv[1]];
         const b = [[argv[2], argv[3]], [argv[4], argv[5]]];
         const c = [argv[6], argv[7]];
         const Input = argv.slice(8);
 
+        // calls verifyProof function of contract to execute verify process of the proof
         expect(await verifier.verifyProof(a, b, c, Input)).to.be.true;
+
+        // outputs estimated units of gas to execute verifyProof function of contract
+        console.log(await verifier.estimateGas.verifyProof(a, b, c, Input));
     });
     it("Should return false for invalid proof", async function () {
         let a = [0, 0];
@@ -58,21 +73,69 @@ describe("HelloWorld", function () {
         let c = [0, 0];
         let d = [0]
         expect(await verifier.verifyProof(a, b, c, d)).to.be.false;
+
+        // outputs estimated units of gas to execute verifyProof function of contract
+        console.log(await verifier.estimateGas.verifyProof(a, b, c, d));
     });
 });
 
 
 describe("Multiplier3 with Groth16", function () {
+    let Verifier;
+    let verifier;
 
     beforeEach(async function () {
         //[assignment] insert your script here
+        // Getting the contract to deploy
+        Verifier = await ethers.getContractFactory("Multiplier3Groth16Verifier");
+        verifier = await Verifier.deploy();
+
+        await verifier.deployed();
+        // contract is deployed in address: {verifier.address}
     });
 
     it("Should return true for correct proof", async function () {
         //[assignment] insert your script here
+        // Create a proof using groth16 protocol and bn128 curve pairing from .wasm and .zkey file of HelloWorld
+        const { proof, publicSignals } = await groth16.fullProve({"a":"1","b":"2","c":"3"}, "contracts/circuits/Multiplier3Groth16/Multiplier3_js/Multiplier3.wasm","contracts/circuits/Multiplier3Groth16/circuit_final.zkey");
+        // gives size of proof variable
+        console.log(sizeOf(proof));
+
+        // Print first element of publicSignals array in console
+        // publicSignals array consists of public signals present in template of circom code
+        console.log('1x2x3 =',publicSignals[0]);
+
+        // First two line converts string type into built-in object of BigInt
+        // callData variable contains the input parameters required to verify the proof
+        const editedPublicSignals = unstringifyBigInts(publicSignals);
+        const editedProof = unstringifyBigInts(proof);
+        const calldata = await groth16.exportSolidityCallData(editedProof, editedPublicSignals);
+    
+        // extracts the input parameters required for verifyProof from calldata
+        const argv = calldata.replace(/["[\]\s]/g, "").split(',').map(x => BigInt(x).toString());
+    
+        // assigns required elements of argv to paramters a, b, c and input
+        const a = [argv[0], argv[1]];
+        const b = [[argv[2], argv[3]], [argv[4], argv[5]]];
+        const c = [argv[6], argv[7]];
+        const Input = argv.slice(8);
+
+        // calls verifyProof function of contract to execute verify process of the proof
+        expect(await verifier.verifyProof(a, b, c, Input)).to.be.true;
+
+        // outputs estimated units of gas to execute verifyProof function of contract
+        console.log(await verifier.estimateGas.verifyProof(a, b, c, Input));
     });
     it("Should return false for invalid proof", async function () {
         //[assignment] insert your script here
+        let a = [0, 0];
+        let b = [[0, 0], [0, 0]];
+        let c = [0, 0];
+        let d = [0]
+        expect(await verifier.verifyProof(a, b, c, d)).to.be.false;
+
+        // outputs estimated units of gas to execute verifyProof function of contract
+        console.log(await verifier.estimateGas.verifyProof(a, b, c, d));
     });
 });
 
@@ -81,12 +144,47 @@ describe("Multiplier3 with PLONK", function () {
 
     beforeEach(async function () {
         //[assignment] insert your script here
+        // Getting the contract to deploy
+        Verifier = await ethers.getContractFactory("_plonkMultiplier3Verifier");
+        verifier = await Verifier.deploy();
+
+        await verifier.deployed();
+        // contract is deployed in address: {verifier.address}
     });
 
     it("Should return true for correct proof", async function () {
         //[assignment] insert your script here
+        // Create a proof using groth16 protocol and bn128 curve pairing from .wasm and .zkey file of HelloWorld
+        const { proof, publicSignals } = await plonk.fullProve({"a":"2","b":"2","c":"3"}, "contracts/circuits/_plonkMultiplier3/Multiplier3_js/Multiplier3.wasm","contracts/circuits/_plonkMultiplier3/circuit_final.zkey");
+        console.log(sizeOf(proof));
+
+        // Print first element of publicSignals array in console
+        // publicSignals array consists of public signals present in template of circom code
+        console.log('2x2x3 =',publicSignals[0]);
+
+        // First two line converts string type into built-in object of BigInt
+        // callData variable contains the input parameters required to verify the proof
+        const editedPublicSignals = unstringifyBigInts(publicSignals);
+        const editedProof = unstringifyBigInts(proof);
+        const calldata = await plonk.exportSolidityCallData(editedProof, editedPublicSignals);
+    
+        // extracts the input parameters required for verifyProof from calldata
+        const argv = calldata.replace(/["[\]\s]/g, "").split(',');
+
+        // calls verifyProof function of contract to execute verify process of the proof
+        expect(await verifier.verifyProof(argv[0], publicSignals)).to.be.true;
+
+        // outputs estimated units of gas to execute verifyProof function of contract
+        console.log(await verifier.estimateGas.verifyProof(argv[0], publicSignals));
+
     });
     it("Should return false for invalid proof", async function () {
         //[assignment] insert your script here
+        proofArg = "0x00" ;
+        signalData = [0, 0];
+        expect(await verifier.verifyProof(proofArg, signalData)).to.be.false;
+
+        // outputs estimated units of gas to execute verifyProof function of contract
+        console.log(await verifier.estimateGas.verifyProof(proofArg, signalData));
     });
 });
